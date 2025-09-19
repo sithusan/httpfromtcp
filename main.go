@@ -15,35 +15,50 @@ func main() {
 		log.Fatalf("Cannot open messages %s\n", err)
 	}
 
-	defer file.Close()
+	lines := getLinesChannel(file)
 
+	for line := range lines {
+		fmt.Printf("read: %s\n", line)
+	}
+}
+
+func getLinesChannel(f io.ReadCloser) <-chan string {
+
+	lines := make(chan string)
 	buffer := make([]byte, 8)
 
-	currentLine := ""
+	go func() {
+		defer f.Close()
+		defer close(lines)
 
-	for {
-		n, err := file.Read(buffer)
+		currentLine := ""
 
-		parts := strings.Split(string(buffer[:n]), "\n")
+		for {
+			n, err := f.Read(buffer)
 
-		for i := 0; i < len(parts)-1; i++ {
-			currentLine = currentLine + parts[i]
-			fmt.Printf("read: %s\n", currentLine)
-			currentLine = ""
-		}
+			parts := strings.Split(string(buffer[:n]), "\n")
 
-		currentLine += parts[len(parts)-1]
-
-		if err != nil {
-			if err == io.EOF {
-				break
+			for i := 0; i < len(parts)-1; i++ {
+				currentLine = currentLine + parts[i]
+				lines <- currentLine
+				currentLine = ""
 			}
 
-			log.Fatalf("Cannot read the file %s\n", err)
-		}
-	}
+			currentLine += parts[len(parts)-1]
 
-	if currentLine != "" {
-		fmt.Printf("read: %s\n", currentLine)
-	}
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+
+				log.Fatalf("Cannot read the file %s\n", err)
+			}
+		}
+
+		if currentLine != "" {
+			lines <- currentLine
+		}
+	}()
+
+	return lines
 }
