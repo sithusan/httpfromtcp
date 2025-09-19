@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -18,8 +19,20 @@ func main() {
 
 	buffer := make([]byte, 8)
 
+	currentLine := ""
+
 	for {
 		n, err := file.Read(buffer)
+
+		parts := strings.Split(string(buffer[:n]), "\n")
+
+		for i := 0; i < len(parts)-1; i++ {
+			currentLine = currentLine + parts[i]
+			fmt.Printf("read: %s\n", currentLine)
+			currentLine = ""
+		}
+
+		currentLine += parts[len(parts)-1]
 
 		if err != nil {
 			if err == io.EOF {
@@ -28,7 +41,9 @@ func main() {
 
 			log.Fatalf("Cannot read the file %s\n", err)
 		}
+	}
 
-		fmt.Printf("read: %s\n", buffer[:n])
+	if currentLine != "" {
+		fmt.Printf("read: %s\n", currentLine)
 	}
 }
