@@ -7,14 +7,107 @@ import (
 	"strings"
 )
 
-type Request struct {
-	RequestLine RequestLine
-}
+type requestStatus int
+
+const (
+	initialized = 0
+	done        = 1
+)
 
 type RequestLine struct {
 	HttpVersion   string
 	RequestTarget string
 	Method        string
+}
+
+type Request struct {
+	RequestStatus requestStatus
+	RequestLine   RequestLine
+}
+
+func (r *Request) initialized() bool {
+	return r.RequestStatus == initialized
+}
+
+func (r *Request) done() bool {
+	return r.RequestStatus == done
+}
+
+func (r *Request) parse(data []byte) (int, error) {
+	if r.initialized() {
+		parsedBytes, err := r.parseRequestLine(data)
+
+		if err != nil {
+			return 0, err
+		}
+
+		if parsedBytes == 0 {
+			return 0, nil
+		}
+
+		r.RequestStatus = done
+
+		return parsedBytes, nil
+	}
+
+	if r.done() {
+		return 0, fmt.Errorf("error: trying to read the data in done state")
+	}
+
+	return 0, fmt.Errorf("error: unknown state")
+}
+
+func (r *Request) parseRequestLine(data []byte) (int, error) {
+
+	idx, err := checkCLRF(data)
+
+	if err != nil {
+		return 0, err
+	}
+
+	// just needs more data
+	if idx == 0 {
+		return 0, nil
+	}
+
+	parts, err := getRequestLineParts(data, idx)
+
+	if err != nil {
+		return 0, err
+	}
+
+	method, err := getMethod(parts)
+
+	if err != nil {
+		return 0, err
+	}
+
+	requestTarget, err := getRequestTarget(parts)
+
+	if err != nil {
+		return 0, err
+	}
+
+	httpVersion, err := getHttpVersion(parts)
+
+	if err != nil {
+		return 0, err
+
+	}
+
+	r.RequestLine = RequestLine{
+		HttpVersion:   httpVersion,
+		RequestTarget: requestTarget,
+		Method:        method,
+	}
+
+	return idx + len(CLRF), nil
+}
+
+func NewRequest() *Request {
+	return &Request{
+		RequestStatus: initialized,
+	}
 }
 
 const CLRF = "\r\n"
@@ -38,68 +131,58 @@ var supportedMethods = map[string]struct{}{
 }
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	request, err := io.ReadAll(reader)
 
-	if err != nil {
-		return nil, err
+	buffer := make([]byte, 8)
+	readToIndex := 0
+	request := NewRequest()
+
+	for !request.done() {
+		// buffer resizing
+		if len(buffer) <= readToIndex {
+			newBuffer := make([]byte, (len(buffer) * 2))
+			copy(newBuffer, buffer)
+			buffer = newBuffer
+		}
+
+		readedBytes, err := reader.Read(buffer[readToIndex:])
+
+		if err != nil {
+			if err == io.EOF {
+				request.RequestStatus = done
+				break
+			}
+			return nil, err
+		}
+
+		readToIndex += readedBytes
+		parsedBytes, err := request.parse(buffer[:readToIndex])
+
+		if err != nil {
+			return nil, err
+		}
+
+		// remove the used ones
+		// Shift the unparsed data (from parsedBytes onwards) to the beginning of the buffer
+		// Example: if parsedBytes is 3, copy buffer[3:] to buffer[0:]
+		copy(buffer, buffer[parsedBytes:readToIndex])
+		readToIndex -= parsedBytes
 	}
 
-	requestLine, err := parseRequestLine(request)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &Request{
-		RequestLine: *requestLine,
-	}, nil
+	return request, nil
 }
 
-func parseRequestLine(request []byte) (*RequestLine, error) {
+/**
+*
+* Helpers
+**/
 
-	idx, err := checkCLRF(request)
-
-	if err != nil {
-		return nil, err
-	}
-
-	parts, err := getRequestLineParts(request, idx)
-
-	if err != nil {
-		return nil, err
-	}
-
-	method, err := getMethod(parts)
-
-	if err != nil {
-		return nil, err
-	}
-
-	requestTarget, err := getRequestTarget(parts)
-
-	if err != nil {
-		return nil, err
-	}
-
-	httpVersion, err := getHttpVersion(parts)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &RequestLine{
-		HttpVersion:   httpVersion,
-		RequestTarget: requestTarget,
-		Method:        method,
-	}, nil
-}
-
+// No error, because that just means that it needs more data before it can parse the request line.
 func checkCLRF(request []byte) (int, error) {
 
 	idx := bytes.Index(request, []byte(CLRF))
 
 	if idx == -1 {
-		return 0, fmt.Errorf("could not find CRLF in request-line")
+		return 0, nil
 	}
 
 	return idx, nil
