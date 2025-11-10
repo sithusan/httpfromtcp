@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net"
-	"strings"
+
+	"github.com/sithusan/httpfromtcp/internal/request"
 )
 
 const port = ":42069"
@@ -30,53 +30,17 @@ func main() {
 
 		fmt.Println("Connection is accepted from", conn.RemoteAddr())
 
-		lines := getLinesChannel(conn)
+		r, err := request.RequestFromReader(conn)
 
-		for line := range lines {
-			fmt.Println(line)
+		if err != nil {
+			log.Fatalf("Error parsing request: %s\n", err.Error())
 		}
+
+		fmt.Println("Request line:")
+		fmt.Printf("- Method: %s\n", r.RequestLine.Method)
+		fmt.Printf("- Target: %s\n", r.RequestLine.RequestTarget)
+		fmt.Printf("- Version: %s\n", r.RequestLine.HttpVersion)
 
 		fmt.Println("Connection is closed from", conn.RemoteAddr())
 	}
-}
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-
-	lines := make(chan string)
-	buffer := make([]byte, 8)
-
-	go func() {
-		defer f.Close()
-		defer close(lines)
-
-		currentLine := ""
-
-		for {
-			n, err := f.Read(buffer)
-
-			parts := strings.Split(string(buffer[:n]), "\n")
-
-			for i := 0; i < len(parts)-1; i++ {
-				currentLine = currentLine + parts[i]
-				lines <- currentLine
-				currentLine = ""
-			}
-
-			currentLine += parts[len(parts)-1]
-
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-
-				log.Fatalf("Cannot read the file %s\n", err)
-			}
-		}
-
-		if currentLine != "" {
-			lines <- currentLine
-		}
-	}()
-
-	return lines
 }
