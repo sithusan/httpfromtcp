@@ -35,6 +35,10 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, fmt.Errorf("invalid header name: %s", key)
 	}
 
+	/**
+	According to RFC, Each field line consists of a case-insensitive field name followed by a colon (":"),
+	optional leading whitespace, the field line value, and optional trailing whitespace.
+	**/
 	value := bytes.TrimSpace(parts[1])
 	key = strings.TrimSpace(key)
 
