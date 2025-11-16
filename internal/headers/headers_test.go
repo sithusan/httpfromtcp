@@ -8,7 +8,6 @@ import (
 )
 
 func TestValidSingleHeader(t *testing.T) {
-
 	headers := NewHeaders()
 	data := []byte("Host: localhost:42069\r\n\r\n")
 	n, done, err := headers.Parse(data)

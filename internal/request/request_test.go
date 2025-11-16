@@ -33,8 +33,7 @@ func (cr *chunkReader) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
-func TestRequestLineParse(t *testing.T) {
-	// Test: Good GET Request line
+func TestGoodGetRequestLine(t *testing.T) {
 	reader := &chunkReader{
 		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 		numBytesPerRead: 3,
@@ -45,76 +44,85 @@ func TestRequestLineParse(t *testing.T) {
 	assert.Equal(t, "GET", r.RequestLine.Method)
 	assert.Equal(t, "/", r.RequestLine.RequestTarget)
 	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
+}
 
-	// Test: Good GET Request line with path
-	reader = &chunkReader{
+func TestGoodGetRequestWithPath(t *testing.T) {
+	reader := &chunkReader{
 		data:            "GET /coffee HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 		numBytesPerRead: 1,
 	}
-	r, err = RequestFromReader(reader)
+	r, err := RequestFromReader(reader)
 	require.NoError(t, err)
 	require.NotNil(t, r)
 	assert.Equal(t, "GET", r.RequestLine.Method)
 	assert.Equal(t, "/coffee", r.RequestLine.RequestTarget)
 	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
+}
 
-	// Test: Good POST Request line with path
-	reader = &chunkReader{
+func TestGoodPostRequestLineWithPath(t *testing.T) {
+	reader := &chunkReader{
 		data:            "POST /coffee HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 		numBytesPerRead: 50,
 	}
-	r, err = RequestFromReader(reader)
+	r, err := RequestFromReader(reader)
 	require.NoError(t, err)
 	require.NotNil(t, r)
 	assert.Equal(t, "POST", r.RequestLine.Method)
 	assert.Equal(t, "/coffee", r.RequestLine.RequestTarget)
 	assert.Equal(t, "1.1", r.RequestLine.HttpVersion)
+}
 
-	// Test: Invalid number of parts in request line
-	reader = &chunkReader{
+func TestInvalidNumberOfPartsInRequestLine(t *testing.T) {
+	reader := &chunkReader{
 		data:            "/coffee HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 		numBytesPerRead: 3,
 	}
-	_, err = RequestFromReader(reader)
+	_, err := RequestFromReader(reader)
 	require.Error(t, err)
+}
 
-	// Test: Invalid method(small case) in request line
-	reader = &chunkReader{
+func TestInvalidMethodSmallCaseInRequestLine(t *testing.T) {
+	reader := &chunkReader{
 		data:            "get /coffee HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 		numBytesPerRead: 3,
 	}
-	_, err = RequestFromReader(reader)
+	_, err := RequestFromReader(reader)
 	require.Error(t, err)
+}
 
-	// Test: Invalid method(unknow method) in request line
-	reader = &chunkReader{
+func TestInvalidMethodInvalidMethodInRequestLine(t *testing.T) {
+	reader := &chunkReader{
 		data:            "UNKNOWN /coffee HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 		numBytesPerRead: 3,
 	}
-	_, err = RequestFromReader(reader)
+	_, err := RequestFromReader(reader)
 	require.Error(t, err)
+}
 
-	// Test: Invalid method(out of order) in request linea
-	reader = &chunkReader{
+func TestInvalidMethodOutOfOrderInRequestLine(t *testing.T) {
+	reader := &chunkReader{
 		data:            "/coffee GET HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 		numBytesPerRead: 3,
 	}
-	_, err = RequestFromReader(reader)
+	_, err := RequestFromReader(reader)
 	require.Error(t, err)
+}
 
-	// Test: Invalid httpVersion(different version) in request line
-	reader = &chunkReader{
+func TestInvalidHttpVersionDifferenceVersionInRequestLine(t *testing.T) {
+	reader := &chunkReader{
 		data:            "Get /coffee HTTP/3.0\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 		numBytesPerRead: 3,
 	}
-	_, err = RequestFromReader(reader)
+	_, err := RequestFromReader(reader)
 	require.Error(t, err)
 
-	// Test: Invalid httpVersion(unknown protocol) in request line
-	reader = &chunkReader{
+}
+
+func TestInvalidHttpVersionUnknownProtocolInRequestLine(t *testing.T) {
+	reader := &chunkReader{
 		data:            "Get /coffee UNKNOWN/3.0\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0\r\nAccept: */*\r\n\r\n",
 		numBytesPerRead: 3,
 	}
-	_, err = RequestFromReader(reader)
+	_, err := RequestFromReader(reader)
 	require.Error(t, err)
 }
