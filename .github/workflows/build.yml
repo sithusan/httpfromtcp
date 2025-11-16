@@ -1,10 +1,11 @@
-name: Rabbit Quality Gate [Linter & Test & SonarCloud]
+name: HTTPFROMTCP Quality Gate
 
 on:
   pull_request:
   push:
     branches:
       - master
+jobs:
   test:
     runs-on: ubuntu-latest
     steps:
