@@ -110,7 +110,7 @@ func NewRequest() *Request {
 	}
 }
 
-const CLRF = "\r\n"
+var CLRF = []byte("\r\n")
 
 const VERSION_PART_SIZE = 2
 
@@ -178,7 +178,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 // No error, because that just means that it needs more data before it can parse the request line.
 func checkCLRF(request []byte) (int, error) {
 
-	idx := bytes.Index(request, []byte(CLRF))
+	idx := bytes.Index(request, CLRF)
 
 	if idx == -1 {
 		return 0, nil
