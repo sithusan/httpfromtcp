@@ -43,10 +43,14 @@ According to RFC, Each field line consists of a case-insensitive field name foll
 optional leading whitespace, the field line value, and optional trailing whitespace.
 */
 func (h Headers) Set(key, value []byte) {
-	stringKey := string(bytes.TrimSpace(key))
+	stringKey := strings.ToLower(string(bytes.TrimSpace(key)))
 	stringValue := string(bytes.TrimSpace(value))
 
-	h[strings.ToLower(stringKey)] = stringValue
+	if val, ok := h[stringKey]; ok {
+		stringValue = val + ", " + stringValue
+	}
+
+	h[stringKey] = stringValue
 }
 
 /*

@@ -43,6 +43,18 @@ func TestValidTwoHeadersWithExistingHeaders(t *testing.T) {
 	assert.False(t, done)
 }
 
+func TestValidHeadersWithSameKey(t *testing.T) {
+	headers := NewHeaders()
+	headers["set-person"] = "Si"
+	data := []byte("Set-Person: San\r\n\r\n")
+	n, done, err := headers.Parse(data)
+	require.NoError(t, err)
+	require.NotNil(t, headers)
+	assert.Equal(t, "Si, San", headers["set-person"])
+	assert.Equal(t, 17, n)
+	assert.False(t, done)
+}
+
 func TestInvalidSpacingHeader(t *testing.T) {
 
 	headers := NewHeaders()
