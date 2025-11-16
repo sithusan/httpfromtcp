@@ -1,0 +1,26 @@
+name: Rabbit Quality Gate [Linter & Test & SonarCloud]
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+          cache: true
+          cache-dependency-path: go.sum
+      - name: Download Go modules
+        run: go mod download
+      - name: Verify dependencies
+        run: go mod verify
+      - name: Run tests
+        run: |
+          go test "./..."
