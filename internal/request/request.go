@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/sithusan/httpfromtcp/internal/headers"
 )
 
 type requestStatus int
 
 const (
-	initialized = 0
-	done        = 1
+	initialized requestStatus = iota
+	requestStateParsingHeaders
+	done
 )
 
 type RequestLine struct {
@@ -23,6 +26,7 @@ type RequestLine struct {
 type Request struct {
 	RequestStatus requestStatus
 	RequestLine   RequestLine
+	Headers       headers.Headers
 }
 
 func (r *Request) initialized() bool {
@@ -31,6 +35,10 @@ func (r *Request) initialized() bool {
 
 func (r *Request) done() bool {
 	return r.RequestStatus == done
+}
+
+func (r *Request) requestParsingHeaders() bool {
+	return r.RequestStatus == requestStateParsingHeaders
 }
 
 func (r *Request) parse(data []byte) (int, error) {
@@ -45,9 +53,42 @@ func (r *Request) parse(data []byte) (int, error) {
 			return 0, nil
 		}
 
-		r.RequestStatus = done
+		r.RequestStatus = requestStateParsingHeaders
 
 		return parsedBytes, nil
+	}
+
+	// Done from parse = real header parsing done.
+	// We need to keep calling header parse, until consume byte from header parse is equal to current
+	// chunk of the data. Because single chunk can contain multiple headers and we split just by N.
+	if r.requestParsingHeaders() {
+		totalConsumeBytesFromHeader := 0
+
+		for {
+			consumeBytesFromHeader, headerDone, err := r.Headers.Parse(data[totalConsumeBytesFromHeader:])
+
+			if err != nil {
+				return 0, err
+			}
+
+			if headerDone {
+				r.RequestStatus = done
+				return totalConsumeBytesFromHeader, nil
+			}
+
+			totalConsumeBytesFromHeader += consumeBytesFromHeader
+
+			if consumeBytesFromHeader == 0 {
+				// headers are done, needs to return totalConsume bytes, because of the len of CLRF.
+				return totalConsumeBytesFromHeader, nil
+			}
+
+			if totalConsumeBytesFromHeader == len(data) {
+				// Consumed all available data, but headers not done yet
+				return totalConsumeBytesFromHeader, nil
+			}
+		}
+
 	}
 
 	if r.done() {
@@ -107,6 +148,7 @@ func (r *Request) parseRequestLine(data []byte) (int, error) {
 func NewRequest() *Request {
 	return &Request{
 		RequestStatus: initialized,
+		Headers:       headers.NewHeaders(),
 	}
 }
 
