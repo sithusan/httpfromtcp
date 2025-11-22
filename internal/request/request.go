@@ -42,6 +42,27 @@ func (r *Request) requestParsingHeaders() bool {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
+	totalByteParsed := 0
+
+	for !r.done() {
+		singleByteParsed, err := r.parseSingle(data[totalByteParsed:])
+
+		if err != nil {
+			return 0, nil
+		}
+
+		totalByteParsed += singleByteParsed
+
+		if singleByteParsed == 0 {
+			break
+		}
+	}
+
+	return totalByteParsed, nil
+}
+
+func (r *Request) parseSingle(data []byte) (int, error) {
+
 	if r.initialized() {
 		parsedBytes, err := r.parseRequestLine(data)
 
@@ -58,37 +79,18 @@ func (r *Request) parse(data []byte) (int, error) {
 		return parsedBytes, nil
 	}
 
-	// Done from parse = real header parsing done.
-	// We need to keep calling header parse, until consume byte from header parse is equal to current
-	// chunk of the data. Because single chunk can contain multiple headers and we split just by N.
 	if r.requestParsingHeaders() {
-		totalConsumeBytesFromHeader := 0
+		consumeBytesFromHeader, headerDone, err := r.Headers.Parse(data)
 
-		for {
-			consumeBytesFromHeader, headerDone, err := r.Headers.Parse(data[totalConsumeBytesFromHeader:])
-
-			if err != nil {
-				return 0, err
-			}
-
-			if headerDone {
-				r.RequestStatus = done
-				return totalConsumeBytesFromHeader, nil
-			}
-
-			totalConsumeBytesFromHeader += consumeBytesFromHeader
-
-			if consumeBytesFromHeader == 0 {
-				// headers are done, needs to return totalConsume bytes, because of the len of CLRF.
-				return totalConsumeBytesFromHeader, nil
-			}
-
-			if totalConsumeBytesFromHeader == len(data) {
-				// Consumed all available data, but headers not done yet
-				return totalConsumeBytesFromHeader, nil
-			}
+		if err != nil {
+			return 0, err
 		}
 
+		if headerDone {
+			r.RequestStatus = done
+		}
+
+		return consumeBytesFromHeader, nil
 	}
 
 	if r.done() {
@@ -190,7 +192,9 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 		if err != nil {
 			if err == io.EOF {
-				request.RequestStatus = done
+				if request.RequestStatus != done {
+					return nil, fmt.Errorf("incomplete request, in state: %d, read n bytes on EOF: %d", request.RequestStatus, readedBytes)
+				}
 				break
 			}
 			return nil, err

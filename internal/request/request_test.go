@@ -174,3 +174,13 @@ func TestCaseInsensitiveHeaders(t *testing.T) {
 	require.NotNil(t, r)
 	assert.Equal(t, "localhost:42069, www.example.com", r.Headers["host"])
 }
+
+func TestMissingEndOfHeaders(t *testing.T) {
+	reader := &chunkReader{
+		data:            "GET / HTTP/1.1\r\nHost: localhost:42069\r\nUser-Agent: curl/7.81.0",
+		numBytesPerRead: 3,
+	}
+
+	_, err := RequestFromReader(reader)
+	require.Error(t, err)
+}
