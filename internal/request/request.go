@@ -2,20 +2,27 @@ package request
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/sithusan/httpfromtcp/internal/headers"
 )
+
+var ErrContentBiggerThanLength = errors.New("error: body is bigger than the given content length")
 
 type requestStatus int
 
 const (
 	initialized requestStatus = iota
 	requestStateParsingHeaders
+	requestStateParsingBody
 	done
 )
+
+const KEY_CONTENT_LENGTH = "Content-Length"
 
 type RequestLine struct {
 	HttpVersion   string
@@ -27,6 +34,7 @@ type Request struct {
 	RequestStatus requestStatus
 	RequestLine   RequestLine
 	Headers       headers.Headers
+	Body          []byte
 }
 
 func (r *Request) initialized() bool {
@@ -41,6 +49,10 @@ func (r *Request) requestParsingHeaders() bool {
 	return r.RequestStatus == requestStateParsingHeaders
 }
 
+func (r *Request) requestParsingBody() bool {
+	return r.RequestStatus == requestStateParsingBody
+}
+
 func (r *Request) parse(data []byte) (int, error) {
 	totalByteParsed := 0
 
@@ -48,7 +60,7 @@ func (r *Request) parse(data []byte) (int, error) {
 		singleByteParsed, err := r.parseSingle(data[totalByteParsed:])
 
 		if err != nil {
-			return 0, nil
+			return 0, err
 		}
 
 		totalByteParsed += singleByteParsed
@@ -60,6 +72,10 @@ func (r *Request) parse(data []byte) (int, error) {
 
 	return totalByteParsed, nil
 }
+
+/**
+* State Machine
+**/
 
 func (r *Request) parseSingle(data []byte) (int, error) {
 
@@ -87,10 +103,53 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		}
 
 		if headerDone {
-			r.RequestStatus = done
+			r.RequestStatus = requestStateParsingBody
 		}
 
 		return consumeBytesFromHeader, nil
+	}
+
+	if r.requestParsingBody() {
+
+		/**
+		According to RFC9110 8.6:
+		A user agent SHOULD send Content-Length in a request.
+		And "should" has a specific meaning in RFCs per RFC2119:
+		This word, or the adjective "RECOMMENDED", mean that
+		there may exist valid reasons in particular circumstances to ignore a particular item,
+		but the full implications must be understood and carefully weighed before choosing a different course.
+		So, going to assume that if there is no Content-Length header, there is no body present.
+		**/
+		contentLength, ok := r.Headers.Get(KEY_CONTENT_LENGTH)
+
+		if !ok || len(contentLength) == 0 {
+			r.RequestStatus = done
+			return len(data), nil
+		}
+
+		contentLengthInt, err := strconv.Atoi(contentLength)
+
+		if err != nil {
+			return 0, err
+		}
+
+		if contentLengthInt == 0 {
+			r.RequestStatus = done
+			return len(data), nil
+		}
+
+		r.Body = append(r.Body, data...)
+
+		if len(r.Body) > contentLengthInt {
+			return len(data), ErrContentBiggerThanLength
+		}
+
+		if len(r.Body) == contentLengthInt {
+			r.RequestStatus = done
+			return len(data), nil
+		}
+
+		return len(data), nil
 	}
 
 	if r.done() {
@@ -191,11 +250,13 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		readedBytes, err := reader.Read(buffer[readToIndex:])
 
 		if err != nil {
-			if err == io.EOF {
-				if request.RequestStatus != done {
+			if errors.Is(err, io.EOF) {
+				switch request.RequestStatus {
+				case requestStateParsingBody:
+					return nil, fmt.Errorf("imcomplete request, body less than content length")
+				default:
 					return nil, fmt.Errorf("incomplete request, in state: %d, read n bytes on EOF: %d", request.RequestStatus, readedBytes)
 				}
-				break
 			}
 			return nil, err
 		}

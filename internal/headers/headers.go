@@ -53,9 +53,16 @@ func (h Headers) Set(key, value []byte) {
 	h[stringKey] = stringValue
 }
 
+func (h Headers) Get(key string) (string, bool) {
+
+	v, ok := h[strings.ToLower(key)]
+
+	return v, ok
+}
+
 /*
-* Helpers
- */
+Helpers
+*/
 func validateKey(key []byte) error {
 	stringKey := string(key)
 	errMsg := fmt.Errorf("invalid header name: %s", key)

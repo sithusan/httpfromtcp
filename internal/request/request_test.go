@@ -184,3 +184,76 @@ func TestMissingEndOfHeaders(t *testing.T) {
 	_, err := RequestFromReader(reader)
 	require.Error(t, err)
 }
+
+func TestStandardBody(t *testing.T) {
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 13\r\n" +
+			"\r\n" +
+			"hello world!\n",
+		numBytesPerRead: 3,
+	}
+
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Equal(t, "hello world!\n", string(r.Body))
+}
+
+func TestEmptyBodyZeroContentLength(t *testing.T) {
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 0\r\n" +
+			"\r\n",
+		numBytesPerRead: 3,
+	}
+
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Empty(t, r.Body)
+}
+
+func TestEmptyBodyNoReportedContentLength(t *testing.T) {
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"\r\n",
+		numBytesPerRead: 3,
+	}
+
+	r, err := RequestFromReader(reader)
+	require.NoError(t, err)
+	require.NotNil(t, r)
+	assert.Empty(t, r.Body)
+}
+
+func TestBodyShorterThanReportedContentLength(t *testing.T) {
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 32\r\n" +
+			"\r\n" +
+			"hello\n",
+		numBytesPerRead: 3,
+	}
+
+	_, err := RequestFromReader(reader)
+	require.Error(t, err)
+}
+
+func TestBodyBiggerThanReportedContentLength(t *testing.T) {
+	reader := &chunkReader{
+		data: "POST /submit HTTP/1.1\r\n" +
+			"Host: localhost:42069\r\n" +
+			"Content-Length: 16\r\n" +
+			"\r\n" +
+			"hello, hello, hello world, hello hello helloooooo\n",
+		numBytesPerRead: 3,
+	}
+
+	_, err := RequestFromReader(reader)
+	require.Error(t, err)
+}
