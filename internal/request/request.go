@@ -11,8 +11,6 @@ import (
 	"github.com/sithusan/httpfromtcp/internal/headers"
 )
 
-var ErrContentBiggerThanLength = errors.New("error: body is bigger than the given content length")
-
 type requestStatus int
 
 const (
@@ -31,26 +29,28 @@ type RequestLine struct {
 }
 
 type Request struct {
-	RequestStatus requestStatus
-	RequestLine   RequestLine
-	Headers       headers.Headers
-	Body          []byte
+	RequestLine RequestLine
+	Headers     headers.Headers
+	Body        []byte
+
+	requestStatus  requestStatus
+	readBodyLength int
 }
 
 func (r *Request) initialized() bool {
-	return r.RequestStatus == initialized
+	return r.requestStatus == initialized
 }
 
 func (r *Request) done() bool {
-	return r.RequestStatus == done
+	return r.requestStatus == done
 }
 
 func (r *Request) requestParsingHeaders() bool {
-	return r.RequestStatus == requestStateParsingHeaders
+	return r.requestStatus == requestStateParsingHeaders
 }
 
 func (r *Request) requestParsingBody() bool {
-	return r.RequestStatus == requestStateParsingBody
+	return r.requestStatus == requestStateParsingBody
 }
 
 func (r *Request) parse(data []byte) (int, error) {
@@ -90,7 +90,7 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 			return 0, nil
 		}
 
-		r.RequestStatus = requestStateParsingHeaders
+		r.requestStatus = requestStateParsingHeaders
 
 		return parsedBytes, nil
 	}
@@ -103,7 +103,7 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		}
 
 		if headerDone {
-			r.RequestStatus = requestStateParsingBody
+			r.requestStatus = requestStateParsingBody
 		}
 
 		return consumeBytesFromHeader, nil
@@ -120,32 +120,28 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		but the full implications must be understood and carefully weighed before choosing a different course.
 		So, going to assume that if there is no Content-Length header, there is no body present.
 		**/
-		contentLength, ok := r.Headers.Get(KEY_CONTENT_LENGTH)
+		contentLengthStr, ok := r.Headers.Get(KEY_CONTENT_LENGTH)
 
-		if !ok || len(contentLength) == 0 {
-			r.RequestStatus = done
+		if !ok {
+			r.requestStatus = done
 			return len(data), nil
 		}
 
-		contentLengthInt, err := strconv.Atoi(contentLength)
+		contentLength, err := strconv.Atoi(contentLengthStr)
 
 		if err != nil {
-			return 0, err
-		}
-
-		if contentLengthInt == 0 {
-			r.RequestStatus = done
-			return len(data), nil
+			return 0, fmt.Errorf("malformed Content-Length: %s", err)
 		}
 
 		r.Body = append(r.Body, data...)
+		r.readBodyLength += len(data)
 
-		if len(r.Body) > contentLengthInt {
-			return len(data), ErrContentBiggerThanLength
+		if r.readBodyLength > contentLength {
+			return len(data), fmt.Errorf("content too large")
 		}
 
-		if len(r.Body) == contentLengthInt {
-			r.RequestStatus = done
+		if r.readBodyLength == contentLength {
+			r.requestStatus = done
 			return len(data), nil
 		}
 
@@ -208,8 +204,8 @@ func (r *Request) parseRequestLine(data []byte) (int, error) {
 
 func NewRequest() *Request {
 	return &Request{
-		RequestStatus: initialized,
 		Headers:       headers.NewHeaders(),
+		requestStatus: initialized,
 	}
 }
 
@@ -251,11 +247,8 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				switch request.RequestStatus {
-				case requestStateParsingBody:
-					return nil, fmt.Errorf("imcomplete request, body less than content length")
-				default:
-					return nil, fmt.Errorf("incomplete request, in state: %d, read n bytes on EOF: %d", request.RequestStatus, readedBytes)
+				if request.requestStatus != done {
+					return nil, fmt.Errorf("incomplete request, in state: %d, read n bytes on EOF: %d", request.requestStatus, readedBytes)
 				}
 			}
 			return nil, err
