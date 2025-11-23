@@ -37,20 +37,8 @@ type Request struct {
 	readBodyLength int
 }
 
-func (r *Request) initialized() bool {
-	return r.requestStatus == initialized
-}
-
 func (r *Request) done() bool {
 	return r.requestStatus == done
-}
-
-func (r *Request) requestParsingHeaders() bool {
-	return r.requestStatus == requestStateParsingHeaders
-}
-
-func (r *Request) requestParsingBody() bool {
-	return r.requestStatus == requestStateParsingBody
 }
 
 func (r *Request) parse(data []byte) (int, error) {
@@ -73,86 +61,100 @@ func (r *Request) parse(data []byte) (int, error) {
 	return totalByteParsed, nil
 }
 
-/**
-* State Machine
-**/
-
+/*
+State Machine
+*/
 func (r *Request) parseSingle(data []byte) (int, error) {
+	switch r.requestStatus {
+	case initialized:
+		return r.requestParsingRequestLine(data)
+	case requestStateParsingHeaders:
+		return r.requestParsingHeaders(data)
+	case requestStateParsingBody:
+		return r.requestParsingBody(data)
+	case done:
+		return 0, fmt.Errorf("error: trying to read the data in done state")
+	default:
+		return 0, fmt.Errorf("error: unknown state")
+	}
+}
 
-	if r.initialized() {
-		parsedBytes, err := r.parseRequestLine(data)
+/*
+initialized --> parsing headers --> parsing body -> done
+*/
+func (r *Request) nextState() {
+	if r.done() {
+		panic("next state called in done state")
+	}
+	r.requestStatus = r.requestStatus + 1
+}
 
-		if err != nil {
-			return 0, err
-		}
+func (r *Request) requestParsingRequestLine(data []byte) (int, error) {
+	parsedBytes, err := r.parseRequestLine(data)
 
-		if parsedBytes == 0 {
-			return 0, nil
-		}
-
-		r.requestStatus = requestStateParsingHeaders
-
-		return parsedBytes, nil
+	if err != nil {
+		return 0, err
 	}
 
-	if r.requestParsingHeaders() {
-		consumeBytesFromHeader, headerDone, err := r.Headers.Parse(data)
-
-		if err != nil {
-			return 0, err
-		}
-
-		if headerDone {
-			r.requestStatus = requestStateParsingBody
-		}
-
-		return consumeBytesFromHeader, nil
+	if parsedBytes == 0 {
+		return 0, nil
 	}
 
-	if r.requestParsingBody() {
+	r.nextState()
 
-		/**
-		According to RFC9110 8.6:
-		A user agent SHOULD send Content-Length in a request.
-		And "should" has a specific meaning in RFCs per RFC2119:
-		This word, or the adjective "RECOMMENDED", mean that
-		there may exist valid reasons in particular circumstances to ignore a particular item,
-		but the full implications must be understood and carefully weighed before choosing a different course.
-		So, going to assume that if there is no Content-Length header, there is no body present.
-		**/
-		contentLengthStr, ok := r.Headers.Get(KEY_CONTENT_LENGTH)
+	return parsedBytes, nil
+}
 
-		if !ok {
-			r.requestStatus = done
-			return len(data), nil
-		}
+func (r *Request) requestParsingHeaders(data []byte) (int, error) {
+	consumeBytesFromHeader, headerDone, err := r.Headers.Parse(data)
 
-		contentLength, err := strconv.Atoi(contentLengthStr)
+	if err != nil {
+		return 0, err
+	}
 
-		if err != nil {
-			return 0, fmt.Errorf("malformed Content-Length: %s", err)
-		}
+	if headerDone {
+		r.nextState()
+	}
 
-		r.Body = append(r.Body, data...)
-		r.readBodyLength += len(data)
+	return consumeBytesFromHeader, nil
+}
 
-		if r.readBodyLength > contentLength {
-			return len(data), fmt.Errorf("content too large")
-		}
+/*
+According to RFC9110 8.6:
+A user agent SHOULD send Content-Length in a request.
+And "should" has a specific meaning in RFCs per RFC2119:
+This word, or the adjective "RECOMMENDED", mean that
+there may exist valid reasons in particular circumstances to ignore a particular item,
+but the full implications must be understood and carefully weighed before choosing a different course.
+So, going to assume that if there is no Content-Length header, there is no body present.
+*/
+func (r *Request) requestParsingBody(data []byte) (int, error) {
+	contentLengthStr, ok := r.Headers.Get(KEY_CONTENT_LENGTH)
 
-		if r.readBodyLength == contentLength {
-			r.requestStatus = done
-			return len(data), nil
-		}
-
+	if !ok {
+		r.requestStatus = done
 		return len(data), nil
 	}
 
-	if r.done() {
-		return 0, fmt.Errorf("error: trying to read the data in done state")
+	contentLength, err := strconv.Atoi(contentLengthStr)
+
+	if err != nil {
+		return 0, fmt.Errorf("malformed Content-Length: %s", err)
 	}
 
-	return 0, fmt.Errorf("error: unknown state")
+	r.Body = append(r.Body, data...)
+	r.readBodyLength += len(data)
+
+	if r.readBodyLength > contentLength {
+		return len(data), fmt.Errorf("content too large")
+	}
+
+	if r.readBodyLength == contentLength {
+		r.nextState()
+		return len(data), nil
+	}
+
+	return len(data), nil
 }
 
 func (r *Request) parseRequestLine(data []byte) (int, error) {
