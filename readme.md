@@ -1,1 +1,1 @@
-# Please no issues or PRs, please leave me alone. 
+- No issues or PRs, please leave me alone. 
