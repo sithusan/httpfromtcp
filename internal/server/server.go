@@ -32,19 +32,25 @@ func Serve(port int) (*Server, error) {
 
 func (s *Server) Close() error {
 	s.closed.Store(true)
-	return s.listener.Close()
+
+	if s.listener != nil {
+		return s.listener.Close()
+	}
+
+	return nil
 }
 
 func (s *Server) listen() {
+
 	for {
 		conn, err := s.listener.Accept()
 
 		if err != nil {
-			log.Fatalf("error: listening http %s", err)
-		}
-
-		if s.closed.Load() {
-			return
+			if s.closed.Load() {
+				return
+			}
+			log.Printf("error: listening http %s", err)
+			continue
 		}
 
 		s.handle(conn)
