@@ -14,8 +14,24 @@ import (
 
 const port = 42069
 
+func main() {
+	server, err := server.Serve(port, handler)
+
+	if err != nil {
+		log.Fatalf("Error starting server: %v", err)
+	}
+	defer server.Close()
+
+	log.Println("Server started on port", port)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
+	log.Println("Server gracefully stopped")
+}
+
 // write to the buffer, not the connection.
-var handler = func(w io.Writer, req *request.Request) *server.HandleError {
+func handler(w io.Writer, req *request.Request) *server.HandleError {
 	requestLine := req.RequestLine
 
 	switch requestLine.RequestTarget {
@@ -33,20 +49,4 @@ var handler = func(w io.Writer, req *request.Request) *server.HandleError {
 		w.Write(([]byte("All good, frfr\n")))
 		return nil
 	}
-}
-
-func main() {
-	server, err := server.Serve(port, handler)
-
-	if err != nil {
-		log.Fatalf("Error starting server: %v", err)
-	}
-	defer server.Close()
-
-	log.Println("Server started on port", port)
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
-	log.Println("Server gracefully stopped")
 }
