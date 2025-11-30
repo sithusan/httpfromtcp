@@ -83,7 +83,11 @@ func (s *Server) handle(conn net.Conn) {
 	request, err := request.RequestFromReader(conn)
 
 	if err != nil {
-		log.Printf("error: on parsing %s", err)
+		hErr := &HandleError{
+			StatusCode: response.BAD_REQUEST,
+			Message:    []byte(err.Error()),
+		}
+		hErr.Write(conn)
 		return
 	}
 
