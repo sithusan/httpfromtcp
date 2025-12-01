@@ -19,12 +19,10 @@ type HandleError struct {
 }
 
 func (hE HandleError) Write(w io.Writer) {
-	writer := &response.Writer{
-		Writer:      w,
-		WriterState: response.WriteStatusLine,
-	}
+	writer := response.NewWriter(w)
+	headers := response.GetDefaultHeaders(len(hE.Message))
+	headers.Override("Content-Type", "text/html")
 
-	headers := response.GetDefaultHeaders(len(hE.Message), "text/plain")
 	writer.WriteStatusLine(hE.StatusCode)
 	writer.WriteHeaders(headers)
 	writer.WriteBody(hE.Message)
@@ -96,9 +94,6 @@ func (s *Server) handle(conn net.Conn) {
 	}
 
 	s.handler(
-		&response.Writer{
-			Writer:      conn,
-			WriterState: response.WriteStatusLine,
-		},
+		response.NewWriter(conn),
 		request)
 }

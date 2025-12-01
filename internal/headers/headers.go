@@ -15,6 +15,10 @@ func NewHeaders() Headers {
 	return map[string]string{}
 }
 
+func (h Headers) Override(key, value string) {
+	h[strings.ToLower(key)] = value
+}
+
 func (h Headers) Parse(data []byte) (int, bool, error) {
 	idx := bytes.Index(data, crlf)
 

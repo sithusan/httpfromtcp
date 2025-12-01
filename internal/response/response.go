@@ -27,16 +27,25 @@ type Writer struct {
 	WriterState writerState
 }
 
+func NewWriter(w io.Writer) *Writer {
+	return &Writer{
+		Writer:      w,
+		WriterState: WriteStatusLine,
+	}
+}
+
 func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
 	if w.WriterState != WriteStatusLine {
 		return fmt.Errorf("error: writing status line in incorrect state: state %v", w.WriterState)
 	}
 
+	defer func() {
+		w.WriterState = WriteHeaders
+	}()
+
 	statusLine := getStatusLine(statusCode)
 
 	_, err := w.Writer.Write(statusLine)
-
-	w.WriterState = WriteHeaders
 
 	return err
 }
@@ -47,7 +56,9 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 		return 0, fmt.Errorf("error: writing headers in incorrect state: state %v", w.WriterState)
 	}
 
-	w.WriterState = Done
+	defer func() {
+		w.WriterState = Done
+	}()
 
 	return w.Writer.Write(p)
 }

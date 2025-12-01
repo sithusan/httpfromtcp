@@ -7,20 +7,23 @@ import (
 	"github.com/sithusan/httpfromtcp/internal/headers"
 )
 
-func GetDefaultHeaders(contentLen int, contentType string) headers.Headers {
+func GetDefaultHeaders(contentLen int) headers.Headers {
 	headers := headers.NewHeaders()
 	headers["Content-Length"] = strconv.Itoa(contentLen)
-	headers["Content-Type"] = contentType // needs to change, by adding new function to override the content Type
-	headers["Connection"] = "close"       // Keep alive will later
+	headers["Content-Type"] = "text/plain"
+	headers["Connection"] = "close" // Keep alive will later
 
 	return headers
 }
 
 func (w *Writer) WriteHeaders(headers headers.Headers) error {
-
 	if w.WriterState != WriteHeaders {
 		return fmt.Errorf("error: writing headers in incorrect state: state %v", w.WriterState)
 	}
+
+	defer func() {
+		w.WriterState = WriteBody
+	}()
 
 	headerString := ""
 

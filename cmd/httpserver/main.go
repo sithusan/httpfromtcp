@@ -77,7 +77,9 @@ func handler(w *response.Writer, req *request.Request) {
 }
 
 func writeResponse(w *response.Writer, statusCode response.StatusCode, body []byte) {
-	headers := response.GetDefaultHeaders(len(body), "text/html")
+	headers := response.GetDefaultHeaders(len(body))
+	headers.Override("Content-Type", "text/html")
+
 	w.WriteStatusLine(statusCode)
 	w.WriteHeaders(headers)
 	w.WriteBody(body)
