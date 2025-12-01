@@ -2,22 +2,26 @@ package response
 
 import (
 	"fmt"
-	"io"
 	"strconv"
 
 	"github.com/sithusan/httpfromtcp/internal/headers"
 )
 
-func GetDefaultHeaders(contentLen int) headers.Headers {
+func GetDefaultHeaders(contentLen int, contentType string) headers.Headers {
 	headers := headers.NewHeaders()
 	headers["Content-Length"] = strconv.Itoa(contentLen)
-	headers["Content-Type"] = "text/plain"
-	headers["Connection"] = "close" // Keep alive will later
+	headers["Content-Type"] = contentType // needs to change, by adding new function to override the content Type
+	headers["Connection"] = "close"       // Keep alive will later
 
 	return headers
 }
 
-func WriteHeaders(w io.Writer, headers headers.Headers) error {
+func (w *Writer) WriteHeaders(headers headers.Headers) error {
+
+	if w.WriterState != WriteHeaders {
+		return fmt.Errorf("error: writing headers in incorrect state: state %v", w.WriterState)
+	}
+
 	headerString := ""
 
 	for key, value := range headers {
@@ -26,7 +30,9 @@ func WriteHeaders(w io.Writer, headers headers.Headers) error {
 
 	headerString += "\r\n"
 
-	_, err := w.Write([]byte(headerString))
+	_, err := w.Writer.Write([]byte(headerString))
+
+	w.WriterState = WriteBody
 
 	return err
 }

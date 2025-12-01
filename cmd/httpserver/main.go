@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -13,6 +12,42 @@ import (
 )
 
 const port = 42069
+
+var successResponse = []byte(
+	`<html>
+<head>
+    <title>200 OK</title>
+  </head>
+  <body>
+    <h1>Success!</h1>
+    <p>Your request was an absolute banger.</p>
+  </body>
+</html>
+`)
+
+var badRequestResponse = []byte(
+	`<html>
+<head>
+    <title>400 Bad Request</title>
+  </head>
+  <body>
+    <h1>Bad Request</h1>
+    <p>Your request honestly kinda sucked.</p>
+  </body>
+</html>
+`)
+
+var internalServerResponse = []byte(
+	`<html>
+<head>
+    <title>500 Internal Server Error</title>
+  </head>
+  <body>
+    <h1>Internal Server Error</h1>
+    <p>Okay, you know what? This one is on me.</p>
+  </body>
+</html>
+`)
 
 func main() {
 	server, err := server.Serve(port, handler)
@@ -30,23 +65,20 @@ func main() {
 	log.Println("Server gracefully stopped")
 }
 
-// write to the buffer, not the connection.
-func handler(w io.Writer, req *request.Request) *server.HandleError {
-	requestLine := req.RequestLine
-
-	switch requestLine.RequestTarget {
+func handler(w *response.Writer, req *request.Request) {
+	switch req.RequestLine.RequestTarget {
 	case "/yourproblem":
-		return &server.HandleError{
-			StatusCode: response.BAD_REQUEST,
-			Message:    []byte("Your problem is not my problem\n"),
-		}
+		writeResponse(w, response.BAD_REQUEST, badRequestResponse)
 	case "/myproblem":
-		return &server.HandleError{
-			StatusCode: response.INTERNAL_SERVER_ERROR,
-			Message:    []byte("Woopsie, my bad\n"),
-		}
+		writeResponse(w, response.INTERNAL_SERVER_ERROR, internalServerResponse)
 	default:
-		w.Write(([]byte("All good, frfr\n")))
-		return nil
+		writeResponse(w, response.OK, successResponse)
 	}
+}
+
+func writeResponse(w *response.Writer, statusCode response.StatusCode, body []byte) {
+	headers := response.GetDefaultHeaders(len(body), "text/html")
+	w.WriteStatusLine(statusCode)
+	w.WriteHeaders(headers)
+	w.WriteBody(body)
 }

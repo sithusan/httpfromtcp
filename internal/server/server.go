@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -12,7 +11,7 @@ import (
 	"github.com/sithusan/httpfromtcp/internal/response"
 )
 
-type Handler func(w io.Writer, req *request.Request) *HandleError
+type Handler func(w *response.Writer, req *request.Request)
 
 type HandleError struct {
 	StatusCode response.StatusCode
@@ -20,10 +19,15 @@ type HandleError struct {
 }
 
 func (hE HandleError) Write(w io.Writer) {
-	headers := response.GetDefaultHeaders(len(hE.Message))
-	response.WriteStatusLine(w, hE.StatusCode)
-	response.WriteHeaders(w, headers)
-	w.Write(hE.Message)
+	writer := &response.Writer{
+		Writer:      w,
+		WriterState: response.WriteStatusLine,
+	}
+
+	headers := response.GetDefaultHeaders(len(hE.Message), "text/plain")
+	writer.WriteStatusLine(hE.StatusCode)
+	writer.WriteHeaders(headers)
+	writer.WriteBody(hE.Message)
 }
 
 type Server struct {
@@ -91,15 +95,10 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 
-	body := &bytes.Buffer{}
-
-	if hErr := s.handler(body, request); hErr != nil {
-		hErr.Write(conn)
-		return
-	}
-
-	headers := response.GetDefaultHeaders(body.Len())
-	response.WriteStatusLine(conn, response.OK)
-	response.WriteHeaders(conn, headers)
-	conn.Write(body.Bytes())
+	s.handler(
+		&response.Writer{
+			Writer:      conn,
+			WriterState: response.WriteStatusLine,
+		},
+		request)
 }
