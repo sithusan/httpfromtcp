@@ -52,7 +52,7 @@ func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
 
 func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
 	if w.WriterState != WriteBody {
-		return 0, fmt.Errorf("error: writing headers in incorrect state: state %v", w.WriterState)
+		return 0, fmt.Errorf("error: writing chunked body in incorrect state: state %v", w.WriterState)
 	}
 
 	size := fmt.Sprintf("%x\r\n", len(p)) // in hexadecimal
