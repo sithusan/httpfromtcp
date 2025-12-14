@@ -1,9 +1,13 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/sithusan/httpfromtcp/internal/request"
@@ -66,14 +70,26 @@ func main() {
 }
 
 func handler(w *response.Writer, req *request.Request) {
-	switch req.RequestLine.RequestTarget {
-	case "/yourproblem":
+	requestTarget := req.RequestLine.RequestTarget
+
+	if requestTarget == "/yourproblem" {
 		writeResponse(w, response.BAD_REQUEST, badRequestResponse)
-	case "/myproblem":
-		writeResponse(w, response.INTERNAL_SERVER_ERROR, internalServerResponse)
-	default:
-		writeResponse(w, response.OK, successResponse)
+		return
 	}
+
+	if requestTarget == "/myproblem" {
+		writeResponse(w, response.INTERNAL_SERVER_ERROR, internalServerResponse)
+		return
+	}
+
+	httpBinPrefix := "/httpbin"
+	if strings.HasPrefix(requestTarget, httpBinPrefix) {
+		url := strings.TrimPrefix(requestTarget, httpBinPrefix)
+		writeProxyResponse(w, url)
+		return
+	}
+
+	writeResponse(w, response.OK, successResponse)
 }
 
 func writeResponse(w *response.Writer, statusCode response.StatusCode, body []byte) {
@@ -83,4 +99,44 @@ func writeResponse(w *response.Writer, statusCode response.StatusCode, body []by
 	w.WriteStatusLine(statusCode)
 	w.WriteHeaders(headers)
 	w.WriteBody(body)
+}
+
+func writeProxyResponse(w *response.Writer, url string) {
+	httpBinUrl := fmt.Sprintf("https://httpbin.org%s", url)
+	resp, err := http.Get(httpBinUrl)
+
+	if err != nil {
+		hErr := &server.HandleError{
+			StatusCode: response.INTERNAL_SERVER_ERROR,
+			Message:    []byte(err.Error()),
+		}
+		hErr.Write(w.Writer)
+	}
+
+	defer resp.Body.Close()
+
+	buffer := make([]byte, 1024)
+
+	headers := response.GetDefaultHeaders(0)
+	headers.Delete("Content-Length")
+	headers.Add("Transfer-Encoding", "chunked")
+
+	w.WriteStatusLine(response.OK)
+	w.WriteHeaders(headers)
+	for {
+		n, err := resp.Body.Read(buffer)
+
+		if n > 0 {
+			w.WriteChunkedBody(buffer[:n])
+		}
+
+		if err == io.EOF {
+			w.WriteChunkedBodyDone()
+			break
+		}
+
+		if err != nil {
+			fmt.Printf("error reading body: %s \n", err)
+		}
+	}
 }

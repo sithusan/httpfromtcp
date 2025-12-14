@@ -50,8 +50,24 @@ func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
 	return err
 }
 
-func (w *Writer) WriteBody(p []byte) (int, error) {
+func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
+	if w.WriterState != WriteBody {
+		return 0, fmt.Errorf("error: writing headers in incorrect state: state %v", w.WriterState)
+	}
 
+	size := fmt.Sprintf("%x\r\n", len(p)) // in hexadecimal
+	data := fmt.Sprintf("%s\r\n", p)
+
+	return w.Writer.Write([]byte(size + data))
+}
+
+func (w *Writer) WriteChunkedBodyDone() (int, error) {
+	chunkedBodyDone := []byte("0\r\n\r\n")
+
+	return w.Writer.Write(chunkedBodyDone)
+}
+
+func (w *Writer) WriteBody(p []byte) (int, error) {
 	if w.WriterState != WriteBody {
 		return 0, fmt.Errorf("error: writing headers in incorrect state: state %v", w.WriterState)
 	}

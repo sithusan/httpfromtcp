@@ -15,8 +15,17 @@ func NewHeaders() Headers {
 	return map[string]string{}
 }
 
+// Same Impl, different purpose
+func (h Headers) Add(key, value string) {
+	h[strings.ToLower(key)] = value
+}
+
 func (h Headers) Override(key, value string) {
 	h[strings.ToLower(key)] = value
+}
+
+func (h Headers) Delete(key string) {
+	delete(h, key)
 }
 
 func (h Headers) Parse(data []byte) (int, bool, error) {
