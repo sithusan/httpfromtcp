@@ -25,7 +25,7 @@ func (h Headers) Override(key, value string) {
 }
 
 func (h Headers) Delete(key string) {
-	delete(h, key)
+	delete(h, strings.ToLower(key))
 }
 
 func (h Headers) Parse(data []byte) (int, bool, error) {

@@ -127,11 +127,15 @@ func writeProxyResponse(w *response.Writer, url string) {
 		n, err := resp.Body.Read(buffer)
 
 		if n > 0 {
-			w.WriteChunkedBody(buffer[:n])
+			if _, err := w.WriteChunkedBody(buffer[:n]); err != nil {
+				fmt.Println("error writing chunked body:", err)
+			}
 		}
 
 		if err == io.EOF {
-			w.WriteChunkedBodyDone()
+			if _, err := w.WriteChunkedBodyDone(); err != nil {
+				fmt.Println("error writing body done:", err)
+			}
 			break
 		}
 
