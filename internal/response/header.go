@@ -9,9 +9,9 @@ import (
 
 func GetDefaultHeaders(contentLen int) headers.Headers {
 	headers := headers.NewHeaders()
-	headers["Content-Length"] = strconv.Itoa(contentLen)
-	headers["Content-Type"] = "text/plain"
-	headers["Connection"] = "close" // Keep alive will later
+	headers["content-length"] = strconv.Itoa(contentLen)
+	headers["content-type"] = "text/plain"
+	headers["connection"] = "close" // Keep alive will later
 
 	return headers
 }

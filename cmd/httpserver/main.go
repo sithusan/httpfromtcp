@@ -85,6 +85,11 @@ func handler(w *response.Writer, req *request.Request) {
 		return
 	}
 
+	if requestTarget == "/video" {
+		writeVideoResponse(w, response.OK, "./assets/vim.mp4")
+		return
+	}
+
 	httpBinPrefix := "/httpbin"
 	if strings.HasPrefix(requestTarget, httpBinPrefix) {
 		url := strings.TrimPrefix(requestTarget, httpBinPrefix)
@@ -102,6 +107,21 @@ func writeResponse(w *response.Writer, statusCode response.StatusCode, body []by
 	w.WriteStatusLine(statusCode)
 	w.WriteHeaders(headers)
 	w.WriteBody(body)
+}
+
+func writeVideoResponse(w *response.Writer, statusCode response.StatusCode, fileUrl string) {
+	readedFile, err := os.ReadFile(fileUrl)
+	if err != nil {
+		writeResponse(w, response.INTERNAL_SERVER_ERROR, internalServerResponse)
+		return
+	}
+
+	headers := response.GetDefaultHeaders(len(readedFile))
+	headers.Override("Content-Type", "video/mp4")
+
+	w.WriteStatusLine(statusCode)
+	w.WriteHeaders(headers)
+	w.WriteBody(readedFile)
 }
 
 func writeProxyResponse(w *response.Writer, url string) {
