@@ -62,14 +62,38 @@ func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
 }
 
 func (w *Writer) WriteChunkedBodyDone() (int, error) {
-	chunkedBodyDone := []byte("0\r\n\r\n")
+	if w.WriterState != WriteBody {
+		return 0, fmt.Errorf("error: writing chunked body done in incorrect state: state %v", w.WriterState)
+	}
+
+	defer func() {
+		w.WriterState = Done
+	}()
+
+	chunkedBodyDone := []byte("0\r\n")
 
 	return w.Writer.Write(chunkedBodyDone)
 }
 
+func (w *Writer) WriteTrailers(trailers map[string]string) (int, error) {
+	if w.WriterState != Done {
+		return 0, fmt.Errorf("error: writing in incorrect state: state %v", w.WriterState)
+	}
+
+	trailerString := ""
+
+	for key, value := range trailers {
+		trailerString += fmt.Sprintf("%s: %s\r\n", key, value)
+	}
+
+	trailerString += "\r\n"
+
+	return w.Writer.Write([]byte(trailerString))
+}
+
 func (w *Writer) WriteBody(p []byte) (int, error) {
 	if w.WriterState != WriteBody {
-		return 0, fmt.Errorf("error: writing headers in incorrect state: state %v", w.WriterState)
+		return 0, fmt.Errorf("error: writing body in incorrect state: state %v", w.WriterState)
 	}
 
 	defer func() {

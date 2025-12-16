@@ -1,12 +1,15 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -116,10 +119,12 @@ func writeProxyResponse(w *response.Writer, url string) {
 	defer resp.Body.Close()
 
 	buffer := make([]byte, 1024)
+	body := make([]byte, 0, 1024) // preallocate 1KB // resizing is based on capacity
 
 	headers := response.GetDefaultHeaders(0)
 	headers.Delete("Content-Length")
 	headers.Add("Transfer-Encoding", "chunked")
+	headers.Add("Trailer", "X-Content-SHA256, X-Content-Length")
 
 	w.WriteStatusLine(response.OK)
 	w.WriteHeaders(headers)
@@ -130,6 +135,7 @@ func writeProxyResponse(w *response.Writer, url string) {
 			if _, err := w.WriteChunkedBody(buffer[:n]); err != nil {
 				fmt.Println("error writing chunked body:", err)
 			}
+			body = append(body, buffer[:n]...)
 		}
 
 		if err == io.EOF {
@@ -143,4 +149,13 @@ func writeProxyResponse(w *response.Writer, url string) {
 			fmt.Printf("error reading body: %s \n", err)
 		}
 	}
+
+	hash := sha256.Sum256(body)
+
+	trailers := map[string]string{
+		"X-Content-SHA256": hex.EncodeToString(hash[:]),
+		"X-Content-Length": strconv.Itoa(len(body)),
+	}
+
+	w.WriteTrailers(trailers)
 }
